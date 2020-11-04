@@ -43,6 +43,18 @@ uint8_t PatternGenerator::step_;
 bool PatternGenerator::first_beat_;
 
 /* static */
+bool PatternGenerator::last_x_gate_;
+
+/* static */
+bool PatternGenerator::last_y_gate_;
+
+/* static */
+bool PatternGenerator::last_random_gate_;
+
+/* static */
+uint32_t PatternGenerator::clock_divider_counter_;
+
+/* static */
 bool PatternGenerator::beat_;
 
 /* static */
@@ -171,6 +183,60 @@ void PatternGenerator::EvaluateEuclidean() {
   }
 }
 
+void PatternGenerator::EvaluateBernoulli() {
+  // check if current gate is high aka above 127 out of 256
+  bool cur_x_gate = settings_.options.drums.x >> 7;
+  bool cur_y_gate = settings_.options.drums.y >> 7;
+  bool cur_random_gate = settings_.options.drums.randomness >> 7;
+  //get random number
+  uint16_t random = Random::state();
+  // refactoring: use dictionary to iterate over possible combinations
+  // chaos -> 1
+  // y -> 2
+  // z -> 3
+  if (cur_random_gate == 1 && last_random_gate_ == 0) {
+    // shrink 8 bit to 4 bit and compare with random mask
+    if ((settings_.density[0] >> 4) >= ((random >> 12) & 0xf)) {
+      state_ |= 0x1;
+    } else {
+      // else give accent out
+      state_ |= 0x8;
+    }
+  }
+
+  if (cur_y_gate == 1 && last_y_gate_ == 0) {
+    if ((settings_.density[1] >> 4) >= ((random >> 8) & 0xf)) {
+      state_ |= 0x2;
+    } else {
+      state_ |= 0x10;
+    }
+  }
+
+  if (cur_x_gate == 1 && last_x_gate_ == 0) {
+    if (settings_.density[2] >> 4 >= ((random >> 4) & 0xf)) {
+      state_ |= 0x4;
+    } else {
+      state_ |= 0x20;
+    }
+  }
+  last_x_gate_ = cur_x_gate;
+  last_y_gate_ = cur_y_gate;
+  last_random_gate_ = cur_random_gate;
+}
+
+void PatternGenerator::EvaluateClockDivider() {
+  uint8_t instrument_mask = 1;
+
+  for (uint8_t i=0; i < kNumParts; i++) {
+    uint8_t ratio = settings_.density[i] >> 4; // 0-255 to 0-16
+    if (clock_divider_counter_%ratio == 0) {
+      state_ |= instrument_mask;
+    }
+    instrument_mask <<= 1;
+  }
+  clock_divider_counter_++;
+}
+
 /* static */
 void PatternGenerator::LoadSettings() {
   options_.unpack(eeprom_read_byte(NULL));
@@ -206,10 +272,14 @@ void PatternGenerator::Evaluate() {
     return;
   }
   
-  if (options_.output_mode == OUTPUT_MODE_EUCLIDEAN) {
-    EvaluateEuclidean();
-  } else {
+  if (options_.output_mode == OUTPUT_MODE_DRUMS) {
     EvaluateDrums();
+  } else if (options_.output_mode == OUTPUT_MODE_EUCLIDIAN) {
+    EvaluateEuclidean();
+  } else if (options_.output_mode == OUTPUT_MODE_BERNOULLI) {
+    EvaluateBernoulli();
+  } else {
+    EvaluateClockDivider();
   }
 }
 

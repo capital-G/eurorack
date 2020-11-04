@@ -94,6 +94,12 @@ inline void UpdateLeds() {
 
       case PARAMETER_OUTPUT_MODE:
         if (pattern_generator.output_mode() == OUTPUT_MODE_DRUMS) {
+          pattern |= LED_HH;
+        } else if (pattern_generator.output_mode() == OUTPUT_MODE_EUCLIDIAN) {
+          pattern |= LED_SD;
+        } else if (pattern_generator.output_mode() == OUTPUT_MODE_BERNOULLI) {
+          pattern |= LED_BD;
+        } else {
           pattern |= LED_ALL;
         }
         break;
@@ -323,7 +329,15 @@ void ScanPots() {
 
           case ADC_CHANNEL_X_CV:
             parameter = PARAMETER_OUTPUT_MODE;
-            pattern_generator.set_output_mode(!(value & 0x80) ? 1 : 0);
+            if (value < 64) {
+              pattern_generator.set_output_mode(0);
+            } else if (value < 128) {
+              pattern_generator.set_output_mode(1);
+            } else if (value < 192) {
+              pattern_generator.set_output_mode(2);
+            } else {
+              pattern_generator.set_output_mode(3);
+            }
             break;
 
           case ADC_CHANNEL_Y_CV:
